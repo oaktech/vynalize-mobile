@@ -4,7 +4,7 @@
 
 # Vynalize Mobile
 
-React Native remote control for [Vynalize](../vinyl-visions) — a real-time audio visualizer. Replaces the browser-based `/remote` with a native app that supports Bonjour auto-discovery and background connectivity.
+React Native remote control for [Vynalize](https://github.com/oaktech/vynalize) — a real-time audio visualizer. Replaces the browser-based `/remote` with a native app that supports Bonjour auto-discovery and background connectivity.
 
 ## Setup
 
