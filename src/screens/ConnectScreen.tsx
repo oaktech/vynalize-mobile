@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   FlatList,
   ActivityIndicator,
+  Image,
   StyleSheet,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -85,8 +86,12 @@ export default function ConnectScreen({ onConnect }: Props) {
     <View style={[styles.container, { paddingTop: insets.top + 20, paddingBottom: insets.bottom }]}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>Vynalize</Text>
-        <Text style={styles.subtitle}>Connect to your display</Text>
+        <Image
+          source={require('../assets/vynalize-logo.png')}
+          style={styles.logo}
+          resizeMode="contain"
+        />
+        <Text style={styles.subtitle}>Remote Control</Text>
       </View>
 
       {/* Error */}
@@ -174,14 +179,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   header: {
+    alignItems: 'center',
     marginBottom: 32,
     paddingHorizontal: 4,
   },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#fff',
-    letterSpacing: -0.5,
+  logo: {
+    width: 340,
+    height: 200,
+    marginBottom: 4,
   },
   subtitle: {
     fontSize: 15,

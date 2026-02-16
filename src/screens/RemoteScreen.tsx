@@ -88,9 +88,15 @@ export default function RemoteScreen({ send, onDisconnect }: Props) {
       ]}
     >
       {/* Header */}
+      <View style={styles.headerLogoRow}>
+        <Image
+          source={require('../assets/vynalize-logo.png')}
+          style={styles.headerLogo}
+          resizeMode="contain"
+        />
+      </View>
       <View style={styles.header}>
         <View>
-          <Text style={styles.title}>Vynalize</Text>
           <Text style={styles.headerSubtitle}>Remote</Text>
         </View>
         <View style={styles.headerRight}>
@@ -290,11 +296,13 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     marginBottom: 24,
   },
-  title: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: 'rgba(255,255,255,0.9)',
-    letterSpacing: -0.3,
+  headerLogoRow: {
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  headerLogo: {
+    width: 260,
+    height: 80,
   },
   headerSubtitle: {
     fontSize: 11,
