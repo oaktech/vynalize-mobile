@@ -1,45 +1,47 @@
-/**
- * Sample React Native App
- * https://github.com/facebook/react-native
- *
- * @format
- */
+import React, { useCallback } from 'react';
+import { StatusBar } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useStore } from './src/store';
+import { useWebSocket } from './src/hooks/useWebSocket';
+import ConnectScreen from './src/screens/ConnectScreen';
+import RemoteScreen from './src/screens/RemoteScreen';
 
-import { NewAppScreen } from '@react-native/new-app-screen';
-import { StatusBar, StyleSheet, useColorScheme, View } from 'react-native';
-import {
-  SafeAreaProvider,
-  useSafeAreaInsets,
-} from 'react-native-safe-area-context';
+const STORAGE_KEY = 'vynalize_last_server';
 
 function App() {
-  const isDarkMode = useColorScheme() === 'dark';
+  const serverUrl = useStore((s) => s.serverUrl);
+  const connected = useStore((s) => s.connected);
+  const setServerUrl = useStore((s) => s.setServerUrl);
+  const disconnect = useStore((s) => s.disconnect);
+
+  const { send, close } = useWebSocket(serverUrl);
+
+  const handleConnect = useCallback(
+    (host: string) => {
+      setServerUrl(host);
+    },
+    [setServerUrl],
+  );
+
+  const handleDisconnect = useCallback(() => {
+    close();
+    disconnect();
+    AsyncStorage.removeItem(STORAGE_KEY);
+  }, [close, disconnect]);
+
+  const showRemote = serverUrl != null && connected;
 
   return (
     <SafeAreaProvider>
-      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
-      <AppContent />
+      <StatusBar barStyle="light-content" backgroundColor="#000" />
+      {showRemote ? (
+        <RemoteScreen send={send} onDisconnect={handleDisconnect} />
+      ) : (
+        <ConnectScreen onConnect={handleConnect} />
+      )}
     </SafeAreaProvider>
   );
 }
-
-function AppContent() {
-  const safeAreaInsets = useSafeAreaInsets();
-
-  return (
-    <View style={styles.container}>
-      <NewAppScreen
-        templateFileName="App.tsx"
-        safeAreaInsets={safeAreaInsets}
-      />
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-});
 
 export default App;
