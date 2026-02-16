@@ -1,97 +1,64 @@
-This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
+# Vynalize Mobile
 
-# Getting Started
+React Native remote control for [Vynalize](../vinyl-visions) — a real-time audio visualizer. Replaces the browser-based `/remote` with a native app that supports Bonjour auto-discovery and background connectivity.
 
-> **Note**: Make sure you have completed the [Set Up Your Environment](https://reactnative.dev/docs/set-up-your-environment) guide before proceeding.
-
-## Step 1: Start Metro
-
-First, you will need to run **Metro**, the JavaScript build tool for React Native.
-
-To start the Metro dev server, run the following command from the root of your React Native project:
+## Setup
 
 ```sh
-# Using npm
-npm start
-
-# OR using Yarn
-yarn start
+npm install
+cd ios && pod install && cd ..
 ```
 
-## Step 2: Build and run your app
-
-With Metro running, open a new terminal window/pane from the root of your React Native project, and use one of the following commands to build and run your Android or iOS app:
-
-### Android
+## Run
 
 ```sh
-# Using npm
-npm run android
+# iOS
+npx react-native run-ios
 
-# OR using Yarn
-yarn android
+# Android
+npx react-native run-android
 ```
 
-### iOS
+## Architecture
 
-For iOS, remember to install CocoaPods dependencies (this only needs to be run on first clone or after updating native deps).
-
-The first time you create a new project, run the Ruby bundler to install CocoaPods itself:
-
-```sh
-bundle install
+```
+src/
+  types.ts                 # AppMode, VisualizerMode, SongInfo, WS messages
+  store.ts                 # Zustand store (synced state from WebSocket)
+  hooks/
+    useWebSocket.ts        # Connect, send commands, receive state, auto-reconnect
+    useDiscovery.ts        # Bonjour/mDNS scan for Vynalize server
+  screens/
+    ConnectScreen.tsx      # Discovery UI + manual IP entry + connect button
+    RemoteScreen.tsx       # Now playing, mode selectors, visualizer grid, sensitivity
+App.tsx                    # Root — ConnectScreen or RemoteScreen based on connection
 ```
 
-Then, and every time you update your native dependencies, run:
+## How it works
 
-```sh
-bundle exec pod install
-```
+1. **ConnectScreen** scans the local network via Bonjour for HTTP services, probes `/api/health` to confirm Vynalize servers, and shows them as tappable cards. Manual IP entry is also available. The last connected server is saved to AsyncStorage for auto-reconnect on next launch.
 
-For more information, please visit [CocoaPods Getting Started guide](https://guides.cocoapods.org/using/getting-started.html).
+2. **RemoteScreen** connects via WebSocket (`ws://<host>/ws?role=controller`) and mirrors the web remote UI — now playing info, app mode selector (Visual/Lyrics/Video/ASCII), 11 visualizer modes in a 3-column grid, prev/next buttons, and a sensitivity slider.
 
-```sh
-# Using npm
-npm run ios
+## WebSocket protocol
 
-# OR using Yarn
-yarn ios
-```
+Connects to the existing Vynalize server with no server-side changes needed.
 
-If everything is set up correctly, you should see your new app running in the Android Emulator, iOS Simulator, or your connected device.
+| Direction | Message |
+|-----------|---------|
+| Send | `{ type: 'command', action: 'setAppMode', value: AppMode }` |
+| Send | `{ type: 'command', action: 'setVisualizerMode', value: VisualizerMode }` |
+| Send | `{ type: 'command', action: 'adjustSensitivity', value: number }` |
+| Send | `{ type: 'command', action: 'nextVisualizer' }` / `prevVisualizer` |
+| Receive | `{ type: 'state', data: { visualizerMode, appMode, accentColor, sensitivityGain } }` |
+| Receive | `{ type: 'song', data: SongInfo \| null }` |
+| Receive | `{ type: 'beat', bpm: number \| null }` |
 
-This is one way to run your app — you can also build it directly from Android Studio or Xcode.
+## Dependencies
 
-## Step 3: Modify your app
-
-Now that you have successfully run the app, let's make changes!
-
-Open `App.tsx` in your text editor of choice and make some changes. When you save, your app will automatically update and reflect these changes — this is powered by [Fast Refresh](https://reactnative.dev/docs/fast-refresh).
-
-When you want to forcefully reload, for example to reset the state of your app, you can perform a full reload:
-
-- **Android**: Press the <kbd>R</kbd> key twice or select **"Reload"** from the **Dev Menu**, accessed via <kbd>Ctrl</kbd> + <kbd>M</kbd> (Windows/Linux) or <kbd>Cmd ⌘</kbd> + <kbd>M</kbd> (macOS).
-- **iOS**: Press <kbd>R</kbd> in iOS Simulator.
-
-## Congratulations! :tada:
-
-You've successfully run and modified your React Native App. :partying_face:
-
-### Now what?
-
-- If you want to add this new React Native code to an existing application, check out the [Integration guide](https://reactnative.dev/docs/integration-with-existing-apps).
-- If you're curious to learn more about React Native, check out the [docs](https://reactnative.dev/docs/getting-started).
-
-# Troubleshooting
-
-If you're having issues getting the above steps to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.
-
-# Learn More
-
-To learn more about React Native, take a look at the following resources:
-
-- [React Native Website](https://reactnative.dev) - learn more about React Native.
-- [Getting Started](https://reactnative.dev/docs/environment-setup) - an **overview** of React Native and how setup your environment.
-- [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
-- [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
-- [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
+| Package | Purpose |
+|---------|---------|
+| `zustand` | State management |
+| `react-native-zeroconf` | Bonjour/mDNS service discovery |
+| `@react-native-async-storage/async-storage` | Persist last server + settings |
+| `@react-native-community/slider` | Native slider component |
