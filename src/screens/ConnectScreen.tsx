@@ -180,13 +180,14 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: 'center',
+    marginTop: 72,
     marginBottom: 32,
     paddingHorizontal: 4,
   },
   logo: {
     width: 340,
     height: 200,
-    marginBottom: 4,
+    marginBottom: 8,
   },
   subtitle: {
     fontSize: 15,
