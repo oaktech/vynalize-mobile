@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="src/assets/vynalize-logo.png" width="400" alt="Vynalize">
+</p>
+
 # Vynalize Mobile
 
 React Native remote control for [Vynalize](../vinyl-visions) — a real-time audio visualizer. Replaces the browser-based `/remote` with a native app that supports Bonjour auto-discovery and background connectivity.
