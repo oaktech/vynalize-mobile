@@ -6,7 +6,6 @@ import {
   Image,
   ScrollView,
   StyleSheet,
-  useWindowDimensions,
 } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -22,16 +21,15 @@ const APP_MODES: { id: AppMode; label: string; icon: string }[] = [
 
 const VIZ_MODES: { id: VisualizerMode; label: string }[] = [
   { id: 'spectrum', label: 'Spectrum' },
-  { id: 'waveform', label: 'Waveform' },
   { id: 'radial', label: 'Radial' },
   { id: 'particles', label: 'Particles' },
-  { id: 'geometric', label: 'Geometry' },
   { id: 'radical', label: 'Radical' },
   { id: 'nebula', label: 'Nebula' },
   { id: 'vitals', label: 'Vitals' },
   { id: 'synthwave', label: 'Synthwave' },
   { id: 'spaceage', label: 'Space Age' },
   { id: 'starrynight', label: 'Starry Night' },
+  { id: 'guitarhero', label: 'Guitar Hero' },
 ];
 
 interface Props {
@@ -41,8 +39,6 @@ interface Props {
 
 export default function RemoteScreen({ send, onDisconnect }: Props) {
   const insets = useSafeAreaInsets();
-  const { width: screenWidth } = useWindowDimensions();
-  const vizBtnWidth = (screenWidth - 40 - 16) / 3; // 40px padding, 2×8px gap
 
   const currentSong = useStore((s) => s.currentSong);
   const bpm = useStore((s) => s.bpm);
@@ -65,13 +61,19 @@ export default function RemoteScreen({ send, onDisconnect }: Props) {
   );
 
   const cyclePrev = useCallback(
-    () => send({ type: 'command', action: 'prevVisualizer' }),
-    [send],
+    () => {
+      send({ type: 'command', action: 'prevVisualizer' });
+      if (appMode !== 'visualizer') setAppMode('visualizer');
+    },
+    [send, appMode, setAppMode],
   );
 
   const cycleNext = useCallback(
-    () => send({ type: 'command', action: 'nextVisualizer' }),
-    [send],
+    () => {
+      send({ type: 'command', action: 'nextVisualizer' });
+      if (appMode !== 'visualizer') setAppMode('visualizer');
+    },
+    [send, appMode, setAppMode],
   );
 
   const setSensitivity = useCallback(
@@ -79,15 +81,18 @@ export default function RemoteScreen({ send, onDisconnect }: Props) {
     [send],
   );
 
+  const activeVizLabel =
+    VIZ_MODES.find((m) => m.id === visualizerMode)?.label ?? visualizerMode;
+
   return (
     <ScrollView
       style={styles.container}
       contentContainerStyle={[
         styles.content,
-        { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 20 },
+        { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 20 },
       ]}
     >
-      {/* Header */}
+      {/* 1. Header */}
       <View style={styles.headerLogoRow}>
         <Image
           source={require('../assets/vynalize-logo.png')}
@@ -95,10 +100,8 @@ export default function RemoteScreen({ send, onDisconnect }: Props) {
           resizeMode="contain"
         />
       </View>
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.headerSubtitle}>Remote</Text>
-        </View>
+      <View style={styles.headerStatusRow}>
+        <View />
         <View style={styles.headerRight}>
           {!connected && (
             <View style={styles.reconnectBadge}>
@@ -116,15 +119,20 @@ export default function RemoteScreen({ send, onDisconnect }: Props) {
         </View>
       </View>
 
-      {/* Now Playing */}
-      <View style={styles.nowPlaying}>
+      {/* 2. Now Playing Hero */}
+      <View
+        style={[
+          styles.nowPlaying,
+          { borderTopColor: accentColor, backgroundColor: `${accentColor}08` },
+        ]}
+      >
         {currentSong ? (
           <View style={styles.songRow}>
             {currentSong.albumArtUrl ? (
               <Image source={{ uri: currentSong.albumArtUrl }} style={styles.albumArt} />
             ) : (
               <View style={styles.albumArtPlaceholder}>
-                <Text style={styles.placeholderIcon}>{'\u25CB'}</Text>
+                <Text style={styles.placeholderIcon}>{'\u266B'}</Text>
               </View>
             )}
             <View style={styles.songInfo}>
@@ -142,22 +150,16 @@ export default function RemoteScreen({ send, onDisconnect }: Props) {
             </View>
           </View>
         ) : (
-          <View style={styles.songRow}>
-            <View style={[styles.albumArtPlaceholder, { opacity: 0.5 }]}>
-              <Text style={[styles.placeholderIcon, { opacity: 0.4 }]}>{'\u25CB'}</Text>
-            </View>
-            <View>
-              <Text style={styles.waitingText}>Waiting for music...</Text>
-              <Text style={styles.waitingHint}>Play a record on the connected display</Text>
-            </View>
+          <View style={styles.listeningContainer}>
+            <Text style={styles.listeningText}>Listening...</Text>
           </View>
         )}
       </View>
 
-      {/* App Mode Selector */}
+      {/* 3. Display Mode — Segmented Control */}
       <View style={styles.section}>
-        <Text style={styles.sectionLabel}>DISPLAY MODE</Text>
-        <View style={styles.modeGrid}>
+        <Text style={styles.sectionLabel}>Display mode</Text>
+        <View style={styles.segmentedControl}>
           {APP_MODES.map((mode) => {
             const active = appMode === mode.id;
             return (
@@ -166,25 +168,14 @@ export default function RemoteScreen({ send, onDisconnect }: Props) {
                 onPress={() => setAppMode(mode.id)}
                 activeOpacity={0.7}
                 style={[
-                  styles.modeBtn,
-                  {
-                    borderColor: active ? `${accentColor}55` : 'rgba(255,255,255,0.06)',
-                    backgroundColor: active ? `${accentColor}18` : 'rgba(255,255,255,0.02)',
-                  },
+                  styles.segment,
+                  active && { backgroundColor: accentColor },
                 ]}
               >
                 <Text
                   style={[
-                    styles.modeIcon,
-                    { color: active ? accentColor : 'rgba(255,255,255,0.4)' },
-                  ]}
-                >
-                  {mode.icon}
-                </Text>
-                <Text
-                  style={[
-                    styles.modeLabel,
-                    { color: active ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.35)' },
+                    styles.segmentText,
+                    { color: active ? '#fff' : 'rgba(255,255,255,0.4)' },
                   ]}
                 >
                   {mode.label}
@@ -195,40 +186,44 @@ export default function RemoteScreen({ send, onDisconnect }: Props) {
         </View>
       </View>
 
-      {/* Visualizer Modes */}
+      {/* 4. Visualizer Picker */}
       <View style={styles.section}>
-        <View style={styles.vizHeader}>
-          <Text style={styles.sectionLabel}>VISUALIZER</Text>
-          <View style={styles.cycleButtons}>
-            <TouchableOpacity onPress={cyclePrev} activeOpacity={0.6} style={styles.cycleBtn}>
-              <Text style={styles.cycleBtnText}>{'\u2039'}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={cycleNext} activeOpacity={0.6} style={styles.cycleBtn}>
-              <Text style={styles.cycleBtnText}>{'\u203A'}</Text>
-            </TouchableOpacity>
-          </View>
+        <Text style={styles.sectionLabel}>Visualizer</Text>
+        <View style={styles.vizNavRow}>
+          <TouchableOpacity onPress={cyclePrev} activeOpacity={0.6} style={styles.vizArrow}>
+            <Text style={styles.vizArrowText}>{'\u2039'}</Text>
+          </TouchableOpacity>
+          <Text style={styles.vizCurrentName}>{activeVizLabel}</Text>
+          <TouchableOpacity onPress={cycleNext} activeOpacity={0.6} style={styles.vizArrow}>
+            <Text style={styles.vizArrowText}>{'\u203A'}</Text>
+          </TouchableOpacity>
         </View>
-        <View style={styles.vizGrid}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.vizChipScroll}
+        >
           {VIZ_MODES.map((mode) => {
             const active = visualizerMode === mode.id;
             return (
               <TouchableOpacity
                 key={mode.id}
-                onPress={() => setVisualizerMode(mode.id)}
+                onPress={() => {
+                  setVisualizerMode(mode.id);
+                  if (appMode !== 'visualizer') setAppMode('visualizer');
+                }}
                 activeOpacity={0.7}
                 style={[
-                  styles.vizBtn,
-                  {
-                    width: vizBtnWidth,
-                    borderColor: active ? `${accentColor}55` : 'rgba(255,255,255,0.06)',
-                    backgroundColor: active ? `${accentColor}18` : 'rgba(255,255,255,0.02)',
-                  },
+                  styles.vizChip,
+                  active
+                    ? { backgroundColor: accentColor }
+                    : { backgroundColor: 'rgba(255,255,255,0.08)' },
                 ]}
               >
                 <Text
                   style={[
-                    styles.vizLabel,
-                    { color: active ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.35)' },
+                    styles.vizChipText,
+                    { color: active ? '#fff' : 'rgba(255,255,255,0.4)' },
                   ]}
                 >
                   {mode.label}
@@ -236,13 +231,13 @@ export default function RemoteScreen({ send, onDisconnect }: Props) {
               </TouchableOpacity>
             );
           })}
-        </View>
+        </ScrollView>
       </View>
 
-      {/* Sensitivity */}
+      {/* 5. Sensitivity Slider */}
       <View style={styles.section}>
         <View style={styles.sensitivityHeader}>
-          <Text style={styles.sectionLabel}>SENSITIVITY</Text>
+          <Text style={styles.sectionLabel}>Sensitivity</Text>
           <Text style={styles.sensitivityValue}>{sensitivityGain.toFixed(1)}x</Text>
         </View>
         <Slider
@@ -265,19 +260,12 @@ export default function RemoteScreen({ send, onDisconnect }: Props) {
           maximumTrackTintColor="rgba(255,255,255,0.08)"
           thumbTintColor={accentColor}
         />
-        <View style={styles.sliderLabels}>
-          <Text style={styles.sliderLabel}>Line-in</Text>
-          <Text style={styles.sliderLabel}>Mic</Text>
-          <Text style={styles.sliderLabel}>Boost</Text>
-        </View>
       </View>
 
-      {/* Disconnect + Footer */}
-      <TouchableOpacity onPress={onDisconnect} activeOpacity={0.7} style={styles.disconnectBtn}>
+      {/* 6. Disconnect */}
+      <TouchableOpacity onPress={onDisconnect} activeOpacity={0.5} style={styles.disconnectBtn}>
         <Text style={styles.disconnectText}>Disconnect</Text>
       </TouchableOpacity>
-
-      <Text style={styles.footer}>Vynalize Remote v0.1.0</Text>
     </ScrollView>
   );
 }
@@ -285,31 +273,26 @@ export default function RemoteScreen({ send, onDisconnect }: Props) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: '#050505',
   },
   content: {
-    paddingHorizontal: 20,
+    paddingHorizontal: 24,
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 24,
-  },
+
+  // 1. Header
   headerLogoRow: {
     alignItems: 'center',
     marginBottom: 8,
   },
-  headerLogo: {
-    width: 260,
-    height: 80,
+  headerStatusRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
   },
-  headerSubtitle: {
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.3)',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-    marginTop: 2,
+  headerLogo: {
+    width: 320,
+    height: 100,
   },
   headerRight: {
     flexDirection: 'row',
@@ -346,142 +329,149 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: 'rgba(255,255,255,0.3)',
   },
+
+  // 2. Now Playing
   nowPlaying: {
-    borderRadius: 16,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
-    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderColor: 'rgba(255,255,255,0.08)',
+    borderTopWidth: 3,
     padding: 16,
     marginBottom: 28,
   },
   songRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
+    gap: 16,
   },
   albumArt: {
-    width: 72,
-    height: 72,
-    borderRadius: 12,
+    width: 88,
+    height: 88,
+    borderRadius: 16,
   },
   albumArtPlaceholder: {
-    width: 72,
-    height: 72,
-    borderRadius: 12,
+    width: 88,
+    height: 88,
+    borderRadius: 16,
     backgroundColor: 'rgba(255,255,255,0.06)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   placeholderIcon: {
-    fontSize: 28,
-    color: 'rgba(255,255,255,0.25)',
+    fontSize: 32,
+    color: 'rgba(255,255,255,0.2)',
   },
   songInfo: {
     flex: 1,
   },
   songTitle: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 18,
+    fontWeight: '700',
     color: '#fff',
   },
   songArtist: {
-    fontSize: 14,
+    fontSize: 15,
     color: 'rgba(255,255,255,0.6)',
-    marginTop: 2,
+    marginTop: 3,
   },
   songAlbum: {
-    fontSize: 12,
+    fontSize: 13,
     color: 'rgba(255,255,255,0.3)',
     marginTop: 4,
   },
-  waitingText: {
-    fontSize: 14,
+  listeningContainer: {
+    alignItems: 'center',
+    paddingVertical: 24,
+  },
+  listeningText: {
+    fontSize: 16,
     color: 'rgba(255,255,255,0.25)',
+    fontWeight: '500',
   },
-  waitingHint: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.15)',
-    marginTop: 4,
-  },
+
+  // Shared section
   section: {
     marginBottom: 28,
   },
   sectionLabel: {
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.3)',
-    letterSpacing: 1,
-    fontWeight: '600',
-    marginBottom: 12,
-    paddingHorizontal: 2,
-  },
-  modeGrid: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  modeBtn: {
-    flex: 1,
-    alignItems: 'center',
-    gap: 6,
-    paddingVertical: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  modeIcon: {
-    fontSize: 18,
-  },
-  modeLabel: {
-    fontSize: 11,
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.4)',
     fontWeight: '500',
-  },
-  vizHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     marginBottom: 12,
-    paddingHorizontal: 2,
   },
-  cycleButtons: {
+
+  // 3. Segmented Control
+  segmentedControl: {
     flexDirection: 'row',
-    gap: 6,
-  },
-  cycleBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderRadius: 22,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
-    backgroundColor: 'rgba(255,255,255,0.03)',
+    padding: 3,
+    height: 44,
+  },
+  segment: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 20,
+  },
+  segmentText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+
+  // 4. Visualizer Picker
+  vizNavRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 20,
+    marginBottom: 14,
+  },
+  vizArrow: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.06)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  cycleBtnText: {
+  vizArrowText: {
     color: 'rgba(255,255,255,0.5)',
-    fontSize: 20,
-    lineHeight: 22,
+    fontSize: 24,
+    lineHeight: 26,
     fontWeight: '300',
   },
-  vizGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  vizCurrentName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
+    minWidth: 100,
+    textAlign: 'center',
+  },
+  vizChipScroll: {
     gap: 8,
+    paddingRight: 24,
   },
-  vizBtn: {
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-    borderRadius: 12,
-    borderWidth: 1,
+  vizChip: {
+    height: 36,
+    paddingHorizontal: 16,
+    borderRadius: 22,
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  vizLabel: {
-    fontSize: 12,
+  vizChipText: {
+    fontSize: 13,
     fontWeight: '500',
   },
+
+  // 5. Sensitivity
   sensitivityHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 4,
-    paddingHorizontal: 2,
   },
   sensitivityValue: {
     fontSize: 13,
@@ -490,37 +480,19 @@ const styles = StyleSheet.create({
   },
   slider: {
     width: '100%',
-    height: 48,
+    height: 44,
   },
-  sliderLabels: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 2,
-    marginTop: -4,
-  },
-  sliderLabel: {
-    fontSize: 10,
-    color: 'rgba(255,255,255,0.2)',
-  },
+
+  // 6. Disconnect
   disconnectBtn: {
     alignSelf: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    backgroundColor: 'rgba(255,255,255,0.03)',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
     marginBottom: 16,
   },
   disconnectText: {
-    color: 'rgba(255,255,255,0.35)',
-    fontSize: 13,
+    color: 'rgba(255,255,255,0.3)',
+    fontSize: 14,
     fontWeight: '500',
-  },
-  footer: {
-    textAlign: 'center',
-    fontSize: 10,
-    color: 'rgba(255,255,255,0.15)',
-    paddingBottom: 8,
   },
 });

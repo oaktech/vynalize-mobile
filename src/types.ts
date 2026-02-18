@@ -10,16 +10,15 @@ export interface SongInfo {
 
 export type VisualizerMode =
   | 'spectrum'
-  | 'waveform'
   | 'radial'
   | 'particles'
-  | 'geometric'
   | 'radical'
   | 'nebula'
   | 'vitals'
   | 'synthwave'
   | 'spaceage'
-  | 'starrynight';
+  | 'starrynight'
+  | 'guitarhero';
 
 export type AppMode = 'visualizer' | 'lyrics' | 'video' | 'ascii';
 
