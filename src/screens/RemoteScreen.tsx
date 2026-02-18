@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   Image,
   ScrollView,
   StyleSheet,
+  type LayoutChangeEvent,
 } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -31,6 +32,11 @@ const VIZ_MODES: { id: VisualizerMode; label: string }[] = [
   { id: 'starrynight', label: 'Starry Night' },
   { id: 'guitarhero', label: 'Guitar Hero' },
 ];
+
+const VIZ_COUNT = VIZ_MODES.length;
+const VIZ_COPIES = 5;
+const VIZ_MID = 2; // middle copy index (0-based)
+const VIZ_RING = Array.from({ length: VIZ_COPIES }, () => VIZ_MODES).flat();
 
 interface Props {
   send: (cmd: WsCommand) => void;
@@ -60,21 +66,23 @@ export default function RemoteScreen({ send, onDisconnect }: Props) {
     [send],
   );
 
-  const cyclePrev = useCallback(
-    () => {
-      send({ type: 'command', action: 'prevVisualizer' });
-      if (appMode !== 'visualizer') setAppMode('visualizer');
-    },
-    [send, appMode, setAppMode],
-  );
+  const cycleDirectionRef = useRef<'left' | 'right' | null>(null);
 
-  const cycleNext = useCallback(
-    () => {
-      send({ type: 'command', action: 'nextVisualizer' });
-      if (appMode !== 'visualizer') setAppMode('visualizer');
-    },
-    [send, appMode, setAppMode],
-  );
+  const cyclePrev = useCallback(() => {
+    const idx = VIZ_MODES.findIndex((m) => m.id === visualizerMode);
+    const prev = VIZ_MODES[(idx - 1 + VIZ_COUNT) % VIZ_COUNT];
+    cycleDirectionRef.current = 'left';
+    setVisualizerMode(prev.id);
+    if (appMode !== 'visualizer') setAppMode('visualizer');
+  }, [visualizerMode, setVisualizerMode, appMode, setAppMode]);
+
+  const cycleNext = useCallback(() => {
+    const idx = VIZ_MODES.findIndex((m) => m.id === visualizerMode);
+    const next = VIZ_MODES[(idx + 1) % VIZ_COUNT];
+    cycleDirectionRef.current = 'right';
+    setVisualizerMode(next.id);
+    if (appMode !== 'visualizer') setAppMode('visualizer');
+  }, [visualizerMode, setVisualizerMode, appMode, setAppMode]);
 
   const setSensitivity = useCallback(
     (v: number) => send({ type: 'command', action: 'adjustSensitivity', value: v }),
@@ -93,6 +101,79 @@ export default function RemoteScreen({ send, onDisconnect }: Props) {
     },
     [send],
   );
+
+  const vizScrollRef = useRef<ScrollView>(null);
+  const vizChipXRef = useRef<number[]>([]);
+  const didInitialScroll = useRef(false);
+  const scrollXRef = useRef(0);
+  const isResettingRef = useRef(false);
+
+  const onVizChipLayout = useCallback((index: number, e: LayoutChangeEvent) => {
+    vizChipXRef.current[index] = e.nativeEvent.layout.x;
+  }, []);
+
+  const scrollToChip = useCallback((index: number, animated: boolean) => {
+    const x = vizChipXRef.current[index];
+    if (x == null || !vizScrollRef.current) return;
+    vizScrollRef.current.scrollTo({ x: Math.max(0, x - 80), animated });
+  }, []);
+
+  // Width of one full copy of chips (computed from layout positions)
+  const oneSetWidthRef = useRef(0);
+
+  // On first layout, jump to the middle copy (no animation)
+  const onVizContentSizeChange = useCallback(() => {
+    if (didInitialScroll.current) return;
+    const first = vizChipXRef.current[0];
+    const second = vizChipXRef.current[VIZ_COUNT];
+    if (first == null || second == null) return;
+    oneSetWidthRef.current = second - first;
+    didInitialScroll.current = true;
+    const modeIdx = VIZ_MODES.findIndex((m) => m.id === visualizerMode);
+    scrollToChip(VIZ_MID * VIZ_COUNT + modeIdx, false);
+  }, [visualizerMode, scrollToChip]);
+
+  // When visualizerMode changes, scroll to the right copy for seamless wrapping
+  useEffect(() => {
+    if (!didInitialScroll.current) return;
+    const modeIdx = VIZ_MODES.findIndex((m) => m.id === visualizerMode);
+    const middleIdx = VIZ_MID * VIZ_COUNT + modeIdx;
+    let targetIdx = middleIdx;
+
+    const dir = cycleDirectionRef.current;
+    cycleDirectionRef.current = null;
+
+    if (dir === 'left' && modeIdx === VIZ_COUNT - 1) {
+      targetIdx = (VIZ_MID - 1) * VIZ_COUNT + modeIdx; // copy before middle
+    } else if (dir === 'right' && modeIdx === 0) {
+      targetIdx = (VIZ_MID + 1) * VIZ_COUNT; // copy after middle
+    }
+
+    scrollToChip(targetIdx, true);
+
+    // After wrap, silently reset to the middle copy
+    if (targetIdx !== middleIdx) {
+      isResettingRef.current = true;
+      setTimeout(() => {
+        scrollToChip(middleIdx, false);
+        isResettingRef.current = false;
+      }, 400);
+    }
+  }, [visualizerMode, scrollToChip]);
+
+  // After any scroll ends, normalize position back into the middle copy
+  const resetToMiddleCopy = useCallback(() => {
+    if (isResettingRef.current) return;
+    const w = oneSetWidthRef.current;
+    if (!w) return;
+    const x = scrollXRef.current;
+    const midStart = VIZ_MID * w;
+    const midEnd = (VIZ_MID + 1) * w;
+    if (x >= midStart && x < midEnd) return; // already in middle copy
+    // Shift by whole-copy increments to land back in the middle copy range
+    const offset = ((x - midStart) % w + w) % w;
+    vizScrollRef.current?.scrollTo({ x: midStart + offset, animated: false });
+  }, []);
 
   const activeVizLabel =
     VIZ_MODES.find((m) => m.id === visualizerMode)?.label ?? visualizerMode;
@@ -235,15 +316,22 @@ export default function RemoteScreen({ send, onDisconnect }: Props) {
           </TouchableOpacity>
         </View>
         <ScrollView
+          ref={vizScrollRef}
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.vizChipScroll}
+          onContentSizeChange={onVizContentSizeChange}
+          onScroll={(e) => { scrollXRef.current = e.nativeEvent.contentOffset.x; }}
+          scrollEventThrottle={16}
+          onMomentumScrollEnd={resetToMiddleCopy}
+          onScrollEndDrag={resetToMiddleCopy}
         >
-          {VIZ_MODES.map((mode) => {
+          {VIZ_RING.map((mode, i) => {
             const active = visualizerMode === mode.id;
             return (
               <TouchableOpacity
-                key={mode.id}
+                key={`${i}-${mode.id}`}
+                onLayout={(e) => onVizChipLayout(i, e)}
                 onPress={() => {
                   setVisualizerMode(mode.id);
                   if (appMode !== 'visualizer') setAppMode('visualizer');
