@@ -1,4 +1,4 @@
-import React, { useCallback, useRef } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -81,6 +81,19 @@ export default function RemoteScreen({ send, onDisconnect }: Props) {
     [send],
   );
 
+  const [syncFlash, setSyncFlash] = useState<string | null>(null);
+  const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const adjustVideoOffset = useCallback(
+    (deltaMs: number) => {
+      send({ type: 'command', action: 'adjustVideoOffset', value: deltaMs });
+      if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
+      setSyncFlash(deltaMs < 0 ? '\u22120.2s' : '+0.2s');
+      syncTimerRef.current = setTimeout(() => setSyncFlash(null), 700);
+    },
+    [send],
+  );
+
   const activeVizLabel =
     VIZ_MODES.find((m) => m.id === visualizerMode)?.label ?? visualizerMode;
 
@@ -155,6 +168,29 @@ export default function RemoteScreen({ send, onDisconnect }: Props) {
           </View>
         )}
       </View>
+
+      {/* Video Sync — rewind / fast-forward */}
+      {appMode === 'video' && currentSong && (
+        <View style={styles.syncRow}>
+          <TouchableOpacity
+            onPress={() => adjustVideoOffset(-200)}
+            activeOpacity={0.6}
+            style={[styles.syncButton, { backgroundColor: `${accentColor}14` }]}
+          >
+            <Text style={[styles.syncIcon, { color: accentColor }]}>{'\u25C0\u25C0'}</Text>
+          </TouchableOpacity>
+          <Text style={[styles.syncLabel, syncFlash != null && { color: accentColor }]}>
+            {syncFlash ?? 'Video sync'}
+          </Text>
+          <TouchableOpacity
+            onPress={() => adjustVideoOffset(200)}
+            activeOpacity={0.6}
+            style={[styles.syncButton, { backgroundColor: `${accentColor}14` }]}
+          >
+            <Text style={[styles.syncIcon, { color: accentColor }]}>{'\u25B6\u25B6'}</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* 3. Display Mode — Segmented Control */}
       <View style={styles.section}>
@@ -419,6 +455,32 @@ const styles = StyleSheet.create({
   segmentText: {
     fontSize: 14,
     fontWeight: '600',
+  },
+
+  // Video Sync
+  syncRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 16,
+    marginTop: -14,
+    marginBottom: 28,
+  },
+  syncButton: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  syncIcon: {
+    fontSize: 22,
+    letterSpacing: -4,
+  },
+  syncLabel: {
+    fontSize: 15,
+    color: 'rgba(255,255,255,0.25)',
+    fontWeight: '500',
   },
 
   // 4. Visualizer Picker
