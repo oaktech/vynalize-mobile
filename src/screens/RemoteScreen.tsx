@@ -258,7 +258,7 @@ export default function RemoteScreen({ send, onDisconnect }: Props) {
             activeOpacity={0.6}
             style={[styles.syncButton, { backgroundColor: `${accentColor}14` }]}
           >
-            <Text style={[styles.syncIcon, { color: accentColor }]}>{'\u25C0\u25C0'}</Text>
+            <Text style={[styles.syncIcon, { color: accentColor }]}>{'\u2039\u2039'}</Text>
           </TouchableOpacity>
           <Text style={[styles.syncLabel, syncFlash != null && { color: accentColor }]}>
             {syncFlash ?? 'Video sync'}
@@ -268,7 +268,7 @@ export default function RemoteScreen({ send, onDisconnect }: Props) {
             activeOpacity={0.6}
             style={[styles.syncButton, { backgroundColor: `${accentColor}14` }]}
           >
-            <Text style={[styles.syncIcon, { color: accentColor }]}>{'\u25B6\u25B6'}</Text>
+            <Text style={[styles.syncIcon, { color: accentColor }]}>{'\u203A\u203A'}</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -562,8 +562,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   syncIcon: {
-    fontSize: 22,
-    letterSpacing: -4,
+    fontSize: 24,
+    lineHeight: 26,
+    fontWeight: '300',
   },
   syncLabel: {
     fontSize: 15,
