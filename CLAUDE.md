@@ -16,7 +16,7 @@ React Native remote control app for the Vynalize audio visualizer.
 - `src/store.ts` — Zustand store synced via WebSocket
 - `src/hooks/useWebSocket.ts` — Controller-role WebSocket with auto-reconnect
 - `src/hooks/useDiscovery.ts` — Bonjour/mDNS discovery via react-native-zeroconf
-- `src/screens/ConnectScreen.tsx` — Server discovery + manual IP entry
+- `src/screens/ConnectScreen.tsx` — Cloud code entry, session validation, local server toggle
 - `src/screens/RemoteScreen.tsx` — Main remote control UI
 
 ## Related codebase
@@ -39,4 +39,4 @@ npx tsc --noEmit   # Type check
 - Dark theme throughout (black background, white text, accent color from server)
 - Default accent color: `#8b5cf6`
 - Auto-reconnect on WebSocket disconnect after 3 seconds
-- Persist last server address via AsyncStorage for auto-connect on launch
+- Persist last server address and session code via AsyncStorage for auto-connect on launch

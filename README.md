@@ -33,20 +33,20 @@ src/
     useWebSocket.ts        # Connect, send commands, receive state, auto-reconnect
     useDiscovery.ts        # Bonjour/mDNS scan for Vynalize server
   screens/
-    ConnectScreen.tsx      # Discovery UI + manual IP entry + connect button
+    ConnectScreen.tsx      # Cloud code entry, session validation, local server toggle
     RemoteScreen.tsx       # Now playing, mode selectors, visualizer carousel, video sync, sensitivity
 App.tsx                    # Root — ConnectScreen or RemoteScreen based on connection
 ```
 
 ## How it works
 
-1. **ConnectScreen** scans the local network via Bonjour for HTTP services, probes `/api/health` to confirm Vynalize servers, and shows them as tappable cards. Manual IP entry is also available. The last connected server is saved to AsyncStorage for auto-reconnect on next launch.
+1. **ConnectScreen** defaults to cloud mode (vynalize.com). The user enters a 6-character display code which auto-triggers connection on the 6th digit. A probe WebSocket validates the session before navigating — invalid codes show an inline error. A "Connect to local server" toggle reveals Bonjour/mDNS discovery and manual IP entry. Both server address and session code are persisted to AsyncStorage for auto-reconnect on next launch.
 
-2. **RemoteScreen** connects via WebSocket (`ws://<host>/ws?role=controller`) and mirrors the web remote UI — now playing info, app mode selector (Visual/Lyrics/Video/ASCII), 10 visualizer modes in an infinite-scroll carousel with prev/next arrows, video sync controls (±0.2s, visible in Video mode), and a sensitivity slider.
+2. **RemoteScreen** connects via WebSocket (`ws[s]://<host>/ws?role=controller[&session=CODE]`) and mirrors the web remote UI — now playing info, app mode selector (Visual/Lyrics/Video/ASCII), 10 visualizer modes in an infinite-scroll carousel with prev/next arrows, video sync controls (±0.2s, visible in Video mode), and a sensitivity slider.
 
 ## WebSocket protocol
 
-Connects to the existing Vynalize server with no server-side changes needed.
+Connects to the existing Vynalize server. Cloud connections use `wss://` and include a `&session=CODE` parameter; local connections use `ws://`.
 
 | Direction | Message |
 |-----------|---------|
