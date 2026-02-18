@@ -21,9 +21,9 @@ React Native remote control app for the Vynalize audio visualizer.
 
 ## Related codebase
 
-The web app lives at `../vinyl-visions`. Types in `src/types.ts` are copied from `vinyl-visions/packages/web/src/types.ts` — keep them in sync when the protocol changes.
+The web app lives at `../vynalize`. Types in `src/types.ts` are copied from `vynalize/packages/web/src/types.ts` — keep them in sync when the protocol changes.
 
-The WebSocket server is at `vinyl-visions/packages/server/src/wsRelay.ts`. No server changes are needed for the mobile app.
+The WebSocket server is at `vynalize/packages/server/src/wsRelay.ts`. No server changes are needed for the mobile app.
 
 ## Commands
 

@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useStore } from '../store';
 import type { WsCommand, WsMessage } from '../types';
 
-export function useWebSocket(serverUrl: string | null) {
+export function useWebSocket(serverUrl: string | null, sessionId: string | null) {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const intentionalClose = useRef(false);
@@ -20,7 +20,11 @@ export function useWebSocket(serverUrl: string | null) {
     intentionalClose.current = false;
 
     function connect() {
-      const wsUrl = `ws://${serverUrl}/ws?role=controller`;
+      const scheme = /^(\d|localhost)/i.test(serverUrl!) ? 'ws' : 'wss';
+      let wsUrl = `${scheme}://${serverUrl}/ws?role=controller`;
+      if (sessionId) {
+        wsUrl += `&session=${sessionId}`;
+      }
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
@@ -72,7 +76,7 @@ export function useWebSocket(serverUrl: string | null) {
       wsRef.current?.close();
       wsRef.current = null;
     };
-  }, [serverUrl, setConnected, setVisualizerMode, setAppMode, setAccentColor, setSensitivityGain, setCurrentSong, setBpm]);
+  }, [serverUrl, sessionId, setConnected, setVisualizerMode, setAppMode, setAccentColor, setSensitivityGain, setCurrentSong, setBpm]);
 
   const send = useCallback((cmd: WsCommand) => {
     const ws = wsRef.current;

@@ -17,51 +17,135 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useDiscovery, type DiscoveredServer } from '../hooks/useDiscovery';
 
 const STORAGE_KEY = 'vynalize_last_server';
+const SESSION_STORAGE_KEY = 'vynalize_last_session';
+const CODE_CHARSET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const CLOUD_HOST = 'vynalize.com';
+
+function isLocalHost(host: string): boolean {
+  return /^(\d|localhost)/i.test(host);
+}
 
 interface Props {
-  onConnect: (host: string) => void;
+  onConnect: (host: string, sessionId?: string) => void;
 }
 
 export default function ConnectScreen({ onConnect }: Props) {
   const insets = useSafeAreaInsets();
   const { servers, scanning, scan } = useDiscovery();
   const [manualIp, setManualIp] = useState('');
+  const [displayCode, setDisplayCode] = useState('');
+  const [localMode, setLocalMode] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Auto-connect to last server on launch
   useEffect(() => {
-    AsyncStorage.getItem(STORAGE_KEY).then((saved) => {
-      if (saved) {
-        handleConnect(saved);
-      } else {
-        scan();
+    Promise.all([
+      AsyncStorage.getItem(STORAGE_KEY),
+      AsyncStorage.getItem(SESSION_STORAGE_KEY),
+    ]).then(([savedHost, savedSession]) => {
+      if (savedSession) setDisplayCode(savedSession);
+
+      if (savedHost && savedSession) {
+        // Have both host + session — reconnect immediately
+        handleConnect(savedHost, savedSession);
+      } else if (savedHost && isLocalHost(savedHost)) {
+        // Local server doesn't require a display code
+        setLocalMode(true);
+        handleConnect(savedHost);
       }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function handleConnect(host: string) {
+  async function handleConnect(host: string, sessionId?: string) {
     setConnecting(true);
     setError(null);
 
     // Probe health first
+    const httpScheme = /^(\d|localhost)/i.test(host) ? 'http' : 'https';
     try {
-      const res = await fetch(`http://${host}/api/health`, {
+      const res = await fetch(`${httpScheme}://${host}/api/health`, {
         method: 'GET',
         headers: { Accept: 'application/json' },
       });
       if (!res.ok) throw new Error('Not a Vynalize server');
     } catch {
       setConnecting(false);
+      setDisplayCode('');
       setError(`Can't reach server at ${host}`);
-      scan();
+      if (isLocalHost(host)) scan();
       return;
     }
 
+    // Validate session code via a probe WS before navigating.
+    // Server behavior: invalid session → sends {type:'error'} then closes with 4001.
+    // Valid session → stays open, may send cached state.
+    if (sessionId) {
+      const wsScheme = isLocalHost(host) ? 'ws' : 'wss';
+      const valid = await new Promise<boolean>((resolve) => {
+        let settled = false;
+        const ws = new WebSocket(
+          `${wsScheme}://${host}/ws?role=controller&session=${sessionId}`,
+        );
+        const timeout = setTimeout(() => {
+          if (!settled) {
+            settled = true;
+            ws.close();
+            resolve(true); // WS stayed open with no error → session valid
+          }
+        }, 1500);
+        ws.onmessage = (e: MessageEvent) => {
+          if (settled) return;
+          try {
+            const msg = JSON.parse(e.data);
+            if (msg.type === 'error') {
+              settled = true;
+              clearTimeout(timeout);
+              ws.close();
+              resolve(false); // Server rejected session
+              return;
+            }
+          } catch {}
+          // Non-error message → session valid with cached state
+          settled = true;
+          clearTimeout(timeout);
+          ws.close();
+          resolve(true);
+        };
+        ws.onclose = () => {
+          if (!settled) {
+            settled = true;
+            clearTimeout(timeout);
+            resolve(false); // Connection closed unexpectedly
+          }
+        };
+        ws.onerror = () => {
+          // onclose will also fire
+        };
+      });
+
+      if (!valid) {
+        setConnecting(false);
+        setDisplayCode('');
+        setError('Invalid code — try again');
+        // Clear persisted session so it doesn't auto-retry on next launch
+        AsyncStorage.removeItem(SESSION_STORAGE_KEY);
+        return;
+      }
+    }
+
     await AsyncStorage.setItem(STORAGE_KEY, host);
+    if (sessionId) {
+      await AsyncStorage.setItem(SESSION_STORAGE_KEY, sessionId);
+    }
     setConnecting(false);
-    onConnect(host);
+    onConnect(host, sessionId);
+  }
+
+  function getSessionId(): string | undefined {
+    const code = displayCode.trim();
+    return code.length > 0 ? code : undefined;
   }
 
   function handleManualConnect() {
@@ -69,20 +153,30 @@ export default function ConnectScreen({ onConnect }: Props) {
     if (!host) return;
     // Add default port if not specified
     const withPort = host.includes(':') ? host : `${host}:3001`;
-    handleConnect(withPort);
+    handleConnect(withPort, getSessionId());
   }
 
   function handleServerPress(server: DiscoveredServer) {
-    handleConnect(`${server.host}:${server.port}`);
+    handleConnect(`${server.host}:${server.port}`, getSessionId());
   }
 
-  if (connecting) {
-    return (
-      <View style={[styles.container, { paddingTop: insets.top + 60 }]}>
-        <ActivityIndicator size="large" color="#8b5cf6" />
-        <Text style={styles.connectingText}>Connecting...</Text>
-      </View>
-    );
+  function toggleLocalMode() {
+    const entering = !localMode;
+    setLocalMode(entering);
+    if (entering) scan();
+  }
+
+  function handleDisplayCodeChange(text: string) {
+    const filtered = text
+      .toUpperCase()
+      .split('')
+      .filter((ch) => CODE_CHARSET.includes(ch))
+      .join('')
+      .slice(0, 6);
+    setDisplayCode(filtered);
+    if (filtered.length === 6 && !connecting) {
+      handleConnect(CLOUD_HOST, filtered);
+    }
   }
 
   return (
@@ -105,6 +199,28 @@ export default function ConnectScreen({ onConnect }: Props) {
         <Text style={styles.subtitle}>Remote Control</Text>
       </View>
 
+      {/* Display code */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>VYNALIZE.COM CODE</Text>
+        <TextInput
+          style={[styles.codeInput, connecting && styles.codeInputDisabled]}
+          value={displayCode}
+          onChangeText={handleDisplayCodeChange}
+          placeholder="ENTER CODE"
+          placeholderTextColor="rgba(255,255,255,0.45)"
+          autoCapitalize="characters"
+          autoCorrect={false}
+          maxLength={6}
+          editable={!connecting}
+        />
+        {connecting && (
+          <View style={styles.inlineSpinner}>
+            <ActivityIndicator size="small" color="#8b5cf6" />
+            <Text style={styles.inlineSpinnerText}>Verifying...</Text>
+          </View>
+        )}
+      </View>
+
       {/* Error */}
       {error && (
         <View style={styles.errorBox}>
@@ -112,73 +228,88 @@ export default function ConnectScreen({ onConnect }: Props) {
         </View>
       )}
 
-      {/* Discovered servers */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>NEARBY SERVERS</Text>
-          {scanning && <ActivityIndicator size="small" color="#8b5cf6" />}
-        </View>
+      {/* Local mode toggle */}
+      <TouchableOpacity
+        style={styles.localToggle}
+        onPress={toggleLocalMode}
+        activeOpacity={0.7}
+      >
+        <Text style={styles.localToggleText}>
+          {localMode ? 'Use cloud server' : 'Connect to local server'}
+        </Text>
+      </TouchableOpacity>
 
-        {servers.length > 0 ? (
-          <FlatList
-            data={servers}
-            keyExtractor={(item) => `${item.host}:${item.port}`}
-            scrollEnabled={false}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                style={styles.serverCard}
-                onPress={() => handleServerPress(item)}
-                activeOpacity={0.7}
-              >
-                <View style={styles.serverDot} />
-                <View style={styles.serverInfo}>
-                  <Text style={styles.serverName}>{item.name}</Text>
-                  <Text style={styles.serverAddr}>{item.host}:{item.port}</Text>
-                </View>
-                <Text style={styles.chevron}>{'\u203A'}</Text>
-              </TouchableOpacity>
-            )}
-          />
-        ) : (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyText}>
-              {scanning ? 'Scanning local network...' : 'No servers found'}
-            </Text>
-            {!scanning && (
-              <TouchableOpacity onPress={scan} style={styles.rescanBtn}>
-                <Text style={styles.rescanText}>Scan Again</Text>
-              </TouchableOpacity>
+      {localMode && (
+        <>
+          {/* Discovered servers */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>LOCAL SERVERS</Text>
+              {scanning && <ActivityIndicator size="small" color="#8b5cf6" />}
+            </View>
+
+            {servers.length > 0 ? (
+              <FlatList
+                data={servers}
+                keyExtractor={(item) => `${item.host}:${item.port}`}
+                scrollEnabled={false}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={styles.serverCard}
+                    onPress={() => handleServerPress(item)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.serverDot} />
+                    <View style={styles.serverInfo}>
+                      <Text style={styles.serverName}>{item.name}</Text>
+                      <Text style={styles.serverAddr}>{item.host}:{item.port}</Text>
+                    </View>
+                    <Text style={styles.chevron}>{'\u203A'}</Text>
+                  </TouchableOpacity>
+                )}
+              />
+            ) : (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyText}>
+                  {scanning ? 'Scanning local network...' : 'No servers found'}
+                </Text>
+                {!scanning && (
+                  <TouchableOpacity onPress={scan} style={styles.rescanBtn}>
+                    <Text style={styles.rescanText}>Scan Again</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             )}
           </View>
-        )}
-      </View>
 
-      {/* Manual entry */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>MANUAL CONNECTION</Text>
-        <View style={styles.manualRow}>
-          <TextInput
-            style={styles.input}
-            value={manualIp}
-            onChangeText={setManualIp}
-            placeholder="192.168.1.100:3001"
-            placeholderTextColor="rgba(255,255,255,0.2)"
-            keyboardType="url"
-            autoCapitalize="none"
-            autoCorrect={false}
-            returnKeyType="go"
-            onSubmitEditing={handleManualConnect}
-          />
-          <TouchableOpacity
-            style={[styles.connectBtn, !manualIp.trim() && styles.connectBtnDisabled]}
-            onPress={handleManualConnect}
-            disabled={!manualIp.trim()}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.connectBtnText}>Connect</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+          {/* Manual entry */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>MANUAL CONNECTION</Text>
+            <View style={styles.manualRow}>
+              <TextInput
+                style={styles.input}
+                value={manualIp}
+                onChangeText={setManualIp}
+                placeholder="192.168.1.100:3001"
+                placeholderTextColor="rgba(255,255,255,0.45)"
+                keyboardType="url"
+                autoCapitalize="none"
+                autoCorrect={false}
+                returnKeyType="go"
+                onSubmitEditing={handleManualConnect}
+              />
+              <TouchableOpacity
+                style={[styles.connectBtn, !manualIp.trim() && styles.connectBtnDisabled]}
+                onPress={handleManualConnect}
+                disabled={!manualIp.trim()}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.connectBtnText}>Connect</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </>
+      )}
     </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -210,7 +341,7 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontSize: 15,
-    color: 'rgba(255,255,255,0.35)',
+    color: 'rgba(255,255,255,0.7)',
     marginTop: 4,
   },
   errorBox: {
@@ -237,7 +368,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 11,
-    color: 'rgba(255,255,255,0.3)',
+    color: 'rgba(255,255,255,0.7)',
     letterSpacing: 1,
     fontWeight: '600',
     marginBottom: 12,
@@ -249,8 +380,8 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
-    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: 'rgba(255,255,255,0.1)',
     marginBottom: 8,
   },
   serverDot: {
@@ -269,13 +400,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   serverAddr: {
-    color: 'rgba(255,255,255,0.4)',
+    color: 'rgba(255,255,255,0.7)',
     fontSize: 12,
     fontFamily: 'Menlo',
     marginTop: 2,
   },
   chevron: {
-    color: 'rgba(255,255,255,0.3)',
+    color: 'rgba(255,255,255,0.7)',
     fontSize: 22,
     fontWeight: '300',
   },
@@ -284,11 +415,11 @@ const styles = StyleSheet.create({
     paddingVertical: 24,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
-    backgroundColor: 'rgba(255,255,255,0.02)',
+    borderColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: 'rgba(255,255,255,0.08)',
   },
   emptyText: {
-    color: 'rgba(255,255,255,0.25)',
+    color: 'rgba(255,255,255,0.6)',
     fontSize: 14,
   },
   rescanBtn: {
@@ -296,12 +427,49 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 8,
-    backgroundColor: 'rgba(139,92,246,0.15)',
+    backgroundColor: 'rgba(139,92,246,0.3)',
   },
   rescanText: {
-    color: '#8b5cf6',
+    color: '#a78bfa',
     fontSize: 13,
     fontWeight: '600',
+  },
+  localToggle: {
+    alignItems: 'center',
+    paddingVertical: 14,
+    marginBottom: 8,
+  },
+  localToggleText: {
+    color: '#a78bfa',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  codeInput: {
+    height: 56,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    color: '#fff',
+    fontSize: 24,
+    fontFamily: 'Menlo',
+    textAlign: 'center',
+    letterSpacing: 8,
+    paddingHorizontal: 16,
+  },
+  codeInputDisabled: {
+    opacity: 0.5,
+  },
+  inlineSpinner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 12,
+  },
+  inlineSpinnerText: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 13,
   },
   manualRow: {
     flexDirection: 'row',
@@ -312,8 +480,8 @@ const styles = StyleSheet.create({
     height: 48,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderColor: 'rgba(255,255,255,0.25)',
+    backgroundColor: 'rgba(255,255,255,0.12)',
     paddingHorizontal: 14,
     color: '#fff',
     fontSize: 15,
@@ -334,11 +502,5 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 15,
     fontWeight: '600',
-  },
-  connectingText: {
-    color: 'rgba(255,255,255,0.5)',
-    fontSize: 15,
-    marginTop: 16,
-    textAlign: 'center',
   },
 });

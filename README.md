@@ -34,7 +34,7 @@ src/
     useDiscovery.ts        # Bonjour/mDNS scan for Vynalize server
   screens/
     ConnectScreen.tsx      # Discovery UI + manual IP entry + connect button
-    RemoteScreen.tsx       # Now playing, mode selectors, visualizer grid, sensitivity
+    RemoteScreen.tsx       # Now playing, mode selectors, visualizer carousel, video sync, sensitivity
 App.tsx                    # Root — ConnectScreen or RemoteScreen based on connection
 ```
 
@@ -42,7 +42,7 @@ App.tsx                    # Root — ConnectScreen or RemoteScreen based on con
 
 1. **ConnectScreen** scans the local network via Bonjour for HTTP services, probes `/api/health` to confirm Vynalize servers, and shows them as tappable cards. Manual IP entry is also available. The last connected server is saved to AsyncStorage for auto-reconnect on next launch.
 
-2. **RemoteScreen** connects via WebSocket (`ws://<host>/ws?role=controller`) and mirrors the web remote UI — now playing info, app mode selector (Visual/Lyrics/Video/ASCII), 11 visualizer modes in a 3-column grid, prev/next buttons, and a sensitivity slider.
+2. **RemoteScreen** connects via WebSocket (`ws://<host>/ws?role=controller`) and mirrors the web remote UI — now playing info, app mode selector (Visual/Lyrics/Video/ASCII), 10 visualizer modes in an infinite-scroll carousel with prev/next arrows, video sync controls (±0.2s, visible in Video mode), and a sensitivity slider.
 
 ## WebSocket protocol
 
@@ -54,6 +54,7 @@ Connects to the existing Vynalize server with no server-side changes needed.
 | Send | `{ type: 'command', action: 'setVisualizerMode', value: VisualizerMode }` |
 | Send | `{ type: 'command', action: 'adjustSensitivity', value: number }` |
 | Send | `{ type: 'command', action: 'nextVisualizer' }` / `prevVisualizer` |
+| Send | `{ type: 'command', action: 'adjustVideoOffset', value: number }` |
 | Receive | `{ type: 'state', data: { visualizerMode, appMode, accentColor, sensitivityGain } }` |
 | Receive | `{ type: 'song', data: SongInfo \| null }` |
 | Receive | `{ type: 'beat', bpm: number \| null }` |
@@ -66,3 +67,4 @@ Connects to the existing Vynalize server with no server-side changes needed.
 | `react-native-zeroconf` | Bonjour/mDNS service discovery |
 | `@react-native-async-storage/async-storage` | Persist last server + settings |
 | `@react-native-community/slider` | Native slider component |
+| `react-native-safe-area-context` | Safe area insets for notch/home indicator |

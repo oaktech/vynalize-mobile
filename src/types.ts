@@ -51,4 +51,9 @@ export interface WsBeatMessage {
   bpm: number | null;
 }
 
-export type WsMessage = WsCommand | WsStateMessage | WsSongMessage | WsBeatMessage;
+export interface WsSessionMessage {
+  type: 'session';
+  sessionId: string;
+}
+
+export type WsMessage = WsCommand | WsStateMessage | WsSongMessage | WsBeatMessage | WsSessionMessage;

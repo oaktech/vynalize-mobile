@@ -8,26 +8,31 @@ import ConnectScreen from './src/screens/ConnectScreen';
 import RemoteScreen from './src/screens/RemoteScreen';
 
 const STORAGE_KEY = 'vynalize_last_server';
+const SESSION_STORAGE_KEY = 'vynalize_last_session';
 
 function App() {
   const serverUrl = useStore((s) => s.serverUrl);
+  const sessionId = useStore((s) => s.sessionId);
   const connected = useStore((s) => s.connected);
   const setServerUrl = useStore((s) => s.setServerUrl);
+  const setSessionId = useStore((s) => s.setSessionId);
   const disconnect = useStore((s) => s.disconnect);
 
-  const { send, close } = useWebSocket(serverUrl);
+  const { send, close } = useWebSocket(serverUrl, sessionId);
 
   const handleConnect = useCallback(
-    (host: string) => {
+    (host: string, session?: string) => {
+      setSessionId(session ?? null);
       setServerUrl(host);
     },
-    [setServerUrl],
+    [setServerUrl, setSessionId],
   );
 
   const handleDisconnect = useCallback(() => {
     close();
     disconnect();
     AsyncStorage.removeItem(STORAGE_KEY);
+    AsyncStorage.removeItem(SESSION_STORAGE_KEY);
   }, [close, disconnect]);
 
   const showRemote = serverUrl != null && connected;
